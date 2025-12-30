@@ -134,6 +134,8 @@ copy_file() {
     
     if [ "$DRY_RUN" = true ]; then
         log_message "KOPYALANDI" "[DRY-RUN] $src → $dst ($(format_size $size))"
+        ((COPIED_COUNT++))
+        COPIED_SIZE=$((COPIED_SIZE + size))
         return 0
     fi
     
@@ -160,6 +162,7 @@ delete_file() {
     
     if [ "$DRY_RUN" = true ]; then
         log_message "SİLİNDİ" "[DRY-RUN] $file"
+        ((DELETED_COUNT++))
         return 0
     fi
     
@@ -184,6 +187,8 @@ update_file() {
     
     if [ "$DRY_RUN" = true ]; then
         log_message "GÜNCELLENDİ" "[DRY-RUN] $dst ($(format_size $size))"
+        ((UPDATED_COUNT++))
+        UPDATED_SIZE=$((UPDATED_SIZE + size))
         return 0
     fi
     
@@ -256,8 +261,10 @@ clean_target() {
         fi
     done
     
-    # Boş dizinleri temizle
-    find "$target_dir" -type d -empty -delete 2>/dev/null
+    # Boş dizinleri temizle (sadece gerçek modda)
+    if [ "$DRY_RUN" != true ]; then
+        find "$target_dir" -type d -empty -delete 2>/dev/null
+    fi
 }
 
 #-------------------------------------------------------------------------------
@@ -282,10 +289,16 @@ show_stats() {
     echo -e "${CYAN}╔══════════════════════════════════════════════════════════════════╗${NC}"
     echo -e "${CYAN}║                    SENKRONİZASYON RAPORU                         ║${NC}"
     echo -e "${CYAN}╚══════════════════════════════════════════════════════════════════╝${NC}"
-    echo -e "  ${GREEN}Kopyalanan:${NC}   $COPIED_COUNT dosya ($(format_size $COPIED_SIZE))"
-    echo -e "  ${YELLOW}Güncellenen:${NC}  $UPDATED_COUNT dosya ($(format_size $UPDATED_SIZE))"
-    echo -e "  ${RED}Silinen:${NC}      $DELETED_COUNT dosya"
-    echo -e "  ${BLUE}Atlanan:${NC}      $SKIPPED_COUNT dosya"
+    
+    if [ "$DRY_RUN" = true ]; then
+        echo -e "  ${YELLOW}⚠  DRY-RUN MODU - Hiçbir değişiklik yapılmadı${NC}"
+        echo ""
+    fi
+    
+    echo -e "  ${GREEN}Kopyalanacak:${NC}   $COPIED_COUNT dosya ($(format_size $COPIED_SIZE))"
+    echo -e "  ${YELLOW}Güncellenecek:${NC}  $UPDATED_COUNT dosya ($(format_size $UPDATED_SIZE))"
+    echo -e "  ${RED}Silinecek:${NC}      $DELETED_COUNT dosya"
+    echo -e "  ${BLUE}Atlanacak:${NC}      $SKIPPED_COUNT dosya"
     echo -e "  ${RED}Hata:${NC}         $ERROR_COUNT"
     echo ""
     echo -e "  ${CYAN}Log dosyası:${NC}  $LOG_FILE"
@@ -357,10 +370,14 @@ if [ ! -d "$SOURCE_DIR" ]; then
     exit 1
 fi
 
-# Hedef klasörü oluştur (yoksa)
+# Hedef klasörü oluştur (yoksa ve DRY-RUN değilse)
 if [ ! -d "$TARGET_DIR" ]; then
-    echo -e "${YELLOW}Hedef klasör oluşturuluyor: $TARGET_DIR${NC}"
-    mkdir -p "$TARGET_DIR"
+    if [ "$DRY_RUN" = true ]; then
+        echo -e "${YELLOW}[DRY-RUN] Hedef klasör oluşturulacak: $TARGET_DIR${NC}"
+    else
+        echo -e "${YELLOW}Hedef klasör oluşturuluyor: $TARGET_DIR${NC}"
+        mkdir -p "$TARGET_DIR"
+    fi
 fi
 
 # Başlık
@@ -373,7 +390,9 @@ echo ""
 echo -e "  ${GREEN}Kaynak:${NC}  $SOURCE_DIR"
 echo -e "  ${GREEN}Hedef:${NC}   $TARGET_DIR"
 echo -e "  ${GREEN}Mod:${NC}     $SYNC_MODE"
-[ "$DRY_RUN" = true ] && echo -e "  ${YELLOW}[DRY-RUN modu aktif - işlem yapılmayacak]${NC}"
+if [ "$DRY_RUN" = true ]; then
+    echo -e "  ${YELLOW}⚠  [DRY-RUN modu aktif - işlem yapılmayacak]${NC}"
+fi
 echo ""
 
 # Log dosyasına başlangıç yaz
@@ -382,6 +401,9 @@ echo "[$(date '+%Y-%m-%d %H:%M:%S')] SENKRONİZASYON BAŞLADI" >> "$LOG_FILE"
 echo "Kaynak: $SOURCE_DIR" >> "$LOG_FILE"
 echo "Hedef: $TARGET_DIR" >> "$LOG_FILE"
 echo "Mod: $SYNC_MODE" >> "$LOG_FILE"
+if [ "$DRY_RUN" = true ]; then
+    echo "DRY-RUN: Aktif (Simülasyon modu)" >> "$LOG_FILE"
+fi
 echo "═══════════════════════════════════════════════════════════════════" >> "$LOG_FILE"
 
 # Senkronizasyonu başlat
@@ -397,6 +419,9 @@ fi
 
 # Log dosyasına bitiş yaz
 echo "[$(date '+%Y-%m-%d %H:%M:%S')] SENKRONİZASYON TAMAMLANDI" >> "$LOG_FILE"
+if [ "$DRY_RUN" = true ]; then
+    echo "DRY-RUN: Hiçbir değişiklik yapılmadı (simülasyon)" >> "$LOG_FILE"
+fi
 echo "Kopyalanan: $COPIED_COUNT, Güncellenen: $UPDATED_COUNT, Silinen: $DELETED_COUNT, Hata: $ERROR_COUNT" >> "$LOG_FILE"
 echo "" >> "$LOG_FILE"
 
